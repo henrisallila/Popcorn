@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Popcorn-kuuntelija</title>
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color-scheme: dark;
+      --bg: #111318;
+      --card: #1b1f2a;
+      --card2: #232938;
+      --text: #f7f7fb;
+      --muted: #a9b0c2;
+      --good: #47d16c;
+      --warn: #ffd166;
+      --accent: #7cc7ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top, #26324f 0%, transparent 32rem), var(--bg);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+    }
+    main { width: min(720px, 100%); display: grid; gap: 16px; }
+    .card {
+      background: color-mix(in srgb, var(--card) 92%, white 8%);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 24px;
+      box-shadow: 0 18px 50px rgba(0,0,0,.34);
+      padding: 20px;
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: clamp(2rem, 8vw, 4rem);
+      line-height: .95;
+      letter-spacing: -0.06em;
+    }
+    p { color: var(--muted); line-height: 1.45; }
+    .status { display: grid; grid-template-columns: 1fr; gap: 12px; text-align: center; }
+    .big {
+      font-size: clamp(2rem, 12vw, 5.5rem);
+      font-weight: 850;
+      letter-spacing: -0.07em;
+      margin: 8px 0;
+    }
+    .message {
+      font-size: clamp(1.2rem, 5vw, 2.4rem);
+      font-weight: 800;
+      padding: 18px;
+      border-radius: 20px;
+      background: var(--card2);
+    }
+    .message.ready { color: var(--accent); }
+    .message.listen { color: var(--good); }
+    .message.warning { color: var(--warn); }
+    .message.stop {
+      color: white;
+      background: linear-gradient(135deg, #e0294f, #ff7b00);
+      animation: pulse .8s infinite alternate;
+    }
+    @keyframes pulse {
+      from { transform: scale(1); filter: brightness(1); }
+      to { transform: scale(1.025); filter: brightness(1.18); }
+    }
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 18px;
+      padding: 18px 20px;
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: #091019;
+      background: linear-gradient(135deg, #7cc7ff, #80ffb0);
+      box-shadow: 0 12px 28px rgba(124,199,255,.22);
+      cursor: pointer;
+    }
+    button.secondary { color: var(--text); background: #2b3244; box-shadow: none; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .metric { background: #141824; border-radius: 18px; padding: 14px 10px; text-align: center; }
+    .metric b { display: block; font-size: 1.4rem; margin-bottom: 4px; }
+    .metric span { color: var(--muted); font-size: .82rem; }
+    label { display: grid; gap: 8px; color: var(--muted); font-weight: 650; margin-top: 14px; }
+    input[type="range"] { width: 100%; }
+    .bar-wrap {
+      height: 18px;
+      background: #0d1018;
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.08);
+    }
+    .bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #7cc7ff, #80ffb0, #ffd166, #ff5c7a);
+      transition: width .08s linear;
+    }
+    small { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card status">
+      <h1>🍿 Popcorn-kuuntelija</h1>
+      <p>Pidä puhelin tai läppäri mikron ulkopuolella. Sovellus kuuntelee poksahduksia ja hälyttää, kun poksujen väli kasvaa valitsemasi rajan yli.</p>
+      <div id="message" class="message ready">Paina aloita</div>
+      <div id="timer" class="big">0.0 s</div>
+      <div class="bar-wrap"><div id="bar" class="bar"></div></div>
+      <button id="startBtn">Aloita kuuntelu</button>
+      <button id="stopBtn" class="secondary" disabled>Lopeta</button>
+    </section>
+
+    <section class="card">
+      <div class="grid">
+        <div class="metric"><b id="popCount">0</b><span>poksahdusta</span></div>
+        <div class="metric"><b id="lastGap">–</b><span>viimeisin väli</span></div>
+        <div class="metric"><b id="avgGap">–</b><span>keskiarvo</span></div>
+      </div>
+
+      <label>
+        Sammutusraja: <span id="limitLabel">3.0 s</span> ilman poksahdusta
+        <input id="gapLimit" type="range" min="2" max="6" step="0.5" value="3" />
+      </label>
+
+      <label>
+        Herkkyys: <span id="sensLabel">60</span>
+        <input id="sensitivity" type="range" min="20" max="95" step="1" value="60" />
+      </label>
+
+      <p><small>Vinkki: jos se reagoi liian herkästi, laske herkkyyttä. Jos se ei tunnista poksuja, nosta herkkyyttä. Tavallinen nyrkkisääntö on lopettaa, kun poksujen väli on noin 2–3 sekuntia.</small></p>
+    </section>
+  </main>
+
+  <script>
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const message = document.getElementById('message');
+    const timer = document.getElementById('timer');
+    const bar = document.getElementById('bar');
+    const popCountEl = document.getElementById('popCount');
+    const lastGapEl = document.getElementById('lastGap');
+    const avgGapEl = document.getElementById('avgGap');
+    const gapLimit = document.getElementById('gapLimit');
+    const sensitivity = document.getElementById('sensitivity');
+    const limitLabel = document.getElementById('limitLabel');
+    const sensLabel = document.getElementById('sensLabel');
+
+    let audioContext, analyser, source, stream, data;
+    let rafId;
+    let startedAt = 0;
+    let lastPopAt = 0;
+    let previousPopAt = 0;
+    let cooldownUntil = 0;
+    let popCount = 0;
+    let gaps = [];
+    let alarmed = false;
+    let baseline = 0;
+    let beepOsc = null;
+    let beepInterval = null;
+
+    const setMessage = (text, cls) => {
+      message.textContent = text;
+      message.className = 'message ' + cls;
+    };
+
+    const updateLabels = () => {
+      limitLabel.textContent = Number(gapLimit.value).toFixed(1) + ' s';
+      sensLabel.textContent = sensitivity.value;
+    };
+
+    gapLimit.addEventListener('input', updateLabels);
+    sensitivity.addEventListener('input', updateLabels);
+    updateLabels();
+
+    function rmsFromData(bytes) {
+      let sum = 0;
+      for (let i = 0; i < bytes.length; i++) {
+        const v = (bytes[i] - 128) / 128;
+        sum += v * v;
+      }
+      return Math.sqrt(sum / bytes.length);
+    }
+
+    function triggerBeep() {
+      if (!audioContext || beepOsc) return;
+      const gain = audioContext.createGain();
+      gain.gain.value = 0.0001;
+      gain.connect(audioContext.destination);
+
+      beepOsc = audioContext.createOscillator();
+      beepOsc.type = 'square';
+      beepOsc.frequency.value = 880;
+      beepOsc.connect(gain);
+      beepOsc.start();
+
+      const now = audioContext.currentTime;
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.25, now + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+
+      setTimeout(() => {
+        try { beepOsc.stop(); } catch {}
+        beepOsc = null;
+      }, 260);
+
+      if ('vibrate' in navigator) navigator.vibrate([250, 120, 250, 120, 500]);
+    }
+
+    function resetStats() {
+      startedAt = performance.now();
+      lastPopAt = 0;
+      previousPopAt = 0;
+      cooldownUntil = 0;
+      popCount = 0;
+      gaps = [];
+      alarmed = false;
+      baseline = 0;
+      if (beepInterval) clearInterval(beepInterval);
+      beepInterval = null;
+      popCountEl.textContent = '0';
+      lastGapEl.textContent = '–';
+      avgGapEl.textContent = '–';
+      timer.textContent = '0.0 s';
+      setMessage('Kuuntelen...', 'listen');
+    }
+
+    function detectLoop(now) {
+      analyser.getByteTimeDomainData(data);
+      const rms = rmsFromData(data);
+      const level = Math.min(100, Math.round(rms * 420));
+      bar.style.width = level + '%';
+
+      baseline = baseline ? (baseline * 0.97 + rms * 0.03) : rms;
+
+      const elapsed = (now - startedAt) / 1000;
+      timer.textContent = elapsed.toFixed(1) + ' s';
+
+      const sens = Number(sensitivity.value);
+      const threshold = Math.max(0.035, baseline * (2.2 + (100 - sens) / 18));
+      const isPop = rms > threshold && now > cooldownUntil;
+
+      if (isPop) {
+        previousPopAt = lastPopAt;
+        lastPopAt = now;
+        cooldownUntil = now + 230;
+        popCount++;
+        popCountEl.textContent = String(popCount);
+
+        if (previousPopAt) {
+          const gap = (lastPopAt - previousPopAt) / 1000;
+          gaps.push(gap);
+          if (gaps.length > 8) gaps.shift();
+          lastGapEl.textContent = gap.toFixed(1) + ' s';
+          const avg = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+          avgGapEl.textContent = avg.toFixed(1) + ' s';
+        }
+
+        if (!alarmed) setMessage('Poksuja kuuluu 🍿', 'listen');
+      }
+
+      const secondsSincePop = lastPopAt ? (now - lastPopAt) / 1000 : 0;
+      const limit = Number(gapLimit.value);
+
+      if (!alarmed && popCount >= 5 && secondsSincePop >= Math.max(2, limit - 0.8)) {
+        setMessage('Kohta valmis...', 'warning');
+      }
+
+      if (!alarmed && popCount >= 5 && secondsSincePop >= limit) {
+        alarmed = true;
+        setMessage('SAMMUTA MIKRO!', 'stop');
+        triggerBeep();
+        beepInterval = setInterval(() => { if (alarmed) triggerBeep(); }, 1400);
+      }
+
+      rafId = requestAnimationFrame(detectLoop);
+    }
+
+    async function start() {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setMessage('Selain ei tue mikrofonia tässä avauksessa', 'warning');
+          alert('Mikrofonia ei voi käyttää tästä avauksesta. Avaa sovellus HTTPS-sivulta, esim. Vercelissä tai GitHub Pagesissa.');
+          return;
+        }
+
+        if (!window.isSecureContext) {
+          setMessage('Avaa HTTPS-osoitteesta', 'warning');
+          alert('Mikrofonilupa vaatii yleensä HTTPS-osoitteen. Pelkkä ladattu HTML-tiedosto ei välttämättä saa käyttää mikrofonia puhelimessa.');
+          return;
+        }
+
+        resetStats();
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          }
+        });
+
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 2048;
+        data = new Uint8Array(analyser.fftSize);
+        source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
+
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        rafId = requestAnimationFrame(detectLoop);
+      } catch (err) {
+        console.error(err);
+        setMessage('Mikrofonilupa puuttuu', 'warning');
+        alert('Salli mikrofonin käyttö selaimessa. Puhelimella mikrofonikäyttö toimii parhaiten HTTPS-sivulta.');
+      }
+    }
+
+    function stop() {
+      alarmed = false;
+      if (beepInterval) clearInterval(beepInterval);
+      cancelAnimationFrame(rafId);
+      if (stream) stream.getTracks().forEach(track => track.stop());
+      if (audioContext) audioContext.close();
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      bar.style.width = '0%';
+      setMessage('Kuuntelu lopetettu', 'ready');
+    }
+
+    startBtn.addEventListener('click', start);
+    stopBtn.addEventListener('click', stop);
+  </script>
+</body>
+</html>
